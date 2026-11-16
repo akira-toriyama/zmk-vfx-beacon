@@ -400,6 +400,13 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
     led with Flags `0x06` (general discoverable, no BR/EDR), as
     prospector-zmk-module sent; a non-connectable broadcaster needs none
     (Core Specification Supplement, Part A, 1.3).
+  - On hardware 2026-11-16 (canon's `--module --logging` images of e1edfe0 on
+    both dongles): with the Prospector Dongle on version 2 and the Imprint
+    Dongle still sending the old layout, `0 status payloads in 60 s` and a
+    grey `--/100`; with both on version 2, 285 payloads in a minute, the
+    broadcaster's `300 updates ok, 0 failed, 0 start failures`, `battery
+    70/66` on both ends, 6 keystrokes on both, and one confirmed modifier
+    that turned the sprite to its back view and back (`2 switches`).
 - Build canon's `imprint_dongle` against a change to the broadcaster, the
   payload or their Kconfig before merging it (runbook row 4): CI's check
   builds compile `src/status_broadcaster.c` on a stock central (since canon
