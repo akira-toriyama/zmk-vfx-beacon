@@ -371,9 +371,42 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   serial function; canon's `dongle.py` opens a device's first port, and two
   ports broke canon's earlier flash script (canon #219, hardware 2026-09-26). The
   shield uses the board's node ([prospector.overlay](boards/shields/prospector/prospector.overlay)).
-- Change the payload layout only with a new version byte, both ends in one
-  commit ([src/status_payload.h](src/status_payload.h)): an older observer then
-  shows no data instead of wrong numbers; canon bumps its pin once.
+- **The payload is this module's own layout, version 2: 9 bytes under the
+  magic `VB`, every byte with a writer and a reader**
+  ([src/status_payload.h](src/status_payload.h); canon t-xe2q, 2026-11-16).
+  Change a byte's place or meaning, or the length, only with a new version
+  byte, both ends in one commit: the observer takes its own version at its
+  own length and shows no data for another instead of wrong numbers; canon
+  bumps its pin once. Add a field only with its reader in the same commit: a
+  byte nothing reads cannot be checked on hardware.
+  - Up to t-xe2q the layout was prospector-zmk-module v2.2.3's 26 bytes under
+    its magic `AB CD` and version byte `0x22`, of which this module wrote the
+    batteries, the active layer's index and the first four bytes of its name,
+    the key press counter (in that layout's `wpm_value`) and the modifiers,
+    and read all but the layer; the keystrokes, the modifiers and the
+    central's own battery had each taken a byte over without a new version.
+  - Never that magic again: the scanner of prospector-zmk-module takes any
+    manufacturer data of 26 bytes or more under `FF FF AB CD` as its own
+    layout and checks no version, which it only shows (its
+    `src/status_scanner.c` and `src/scanner_core.c`, v2.2.3, read 2026-11-16;
+    its channel filter, off by default, aside), so another layout under it
+    shows as wrong values on a stranger's Prospector in range.
+  - Left out on purpose: the active layer and its name (no screen of this
+    module shows a layer; canon's keymap kept its `display-name`s within four
+    characters for a field nothing read), and a charging state (ZMK
+    4dd95d78 raises a peripheral's battery level on the central and nothing
+    of its power source; the central knows only its own `zmk_usb_is_powered()`).
+  - The advertisement's AD is the manufacturer data alone. Up to t-xe2q it
+    led with Flags `0x06` (general discoverable, no BR/EDR), as
+    prospector-zmk-module sent; a non-connectable broadcaster needs none
+    (Core Specification Supplement, Part A, 1.3).
+  - On hardware 2026-11-16 (canon's `--module --logging` images of e1edfe0 on
+    both dongles): with the Prospector Dongle on version 2 and the Imprint
+    Dongle still sending the old layout, `0 status payloads in 60 s` and a
+    grey `--/100`; with both on version 2, 285 payloads in a minute, the
+    broadcaster's `300 updates ok, 0 failed, 0 start failures`, `battery
+    70/66` on both ends, 6 keystrokes on both, and one confirmed modifier
+    that turned the sprite to its back view and back (`2 switches`).
 - Build canon's `imprint_dongle` against a change to the broadcaster, the
   payload or their Kconfig before merging it (runbook row 4): CI's check
   builds compile `src/status_broadcaster.c` on a stock central (since canon
@@ -421,8 +454,7 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   than one peripheral keeps canon's Imprint Dongle (two) as it was: its
   `.config` has `CONFIG_BEACON_OWN_BATTERY_NONE=y` and the subscription to
   ZMK's own battery event is not built (canon `--module` build, 2026-11-09).
-  The payload's version byte did not move: the bytes kept their offsets and
-  0 = no reading. ZMK defines both battery events only with
+  ZMK defines both battery events only with
   `CONFIG_ZMK_BATTERY_REPORTING`, hence the broadcaster's `#if`: main's
   broadcaster failed to link without it (`undefined reference to
   zmk_event_zmk_peripheral_battery_state_changed`, corne_left, 891cf17,

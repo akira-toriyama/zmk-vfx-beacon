@@ -60,9 +60,8 @@ per-key LEDs, is the lantern.
    commit of this repository's `main` (a release
    tag names one as well; v0.1.0 predates most of this page). Build both
    ends from one commit: they share the payload's layout (The status
-   advertisement, below), and a field added without a new version byte is
-   missing from an older broadcaster while a newer Prospector Dongle still
-   accepts its payload.
+   advertisement, below), and the Prospector Dongle shows no data for a
+   broadcaster of another version.
 
 2. The keyboard: three lines in the central's own conf, the central half's
    (`config/corne_left.conf` for ZMK's Corne, whose left half is the
@@ -495,40 +494,55 @@ build with a named embedded sprite.
 
 ### The status advertisement
 
-What the keyboard's central sends and the Prospector Dongle reads: 26
-bytes of manufacturer data in a legacy, non-connectable, non-scannable
-advertisement on a second advertising set next to ZMK's own, every 200 ms
-for as long as the central runs. A key press, a confirmed modifier and its
-release refresh the payload, which goes on air at the next advertising
-event (at most about 210 ms later) and adds no advertisement. The layout is
-[src/status_payload.h](src/status_payload.h), prospector-zmk-module v2.2.3's
-offsets under the same prefix and version byte. The fields written: two
-batteries, the left half's and the right half's, 0 for no reading (the
-central's own level in the one `CONFIG_BEACON_OWN_BATTERY` names, the left
-by default and neither on a split central with two peripherals or more, a
-dongle; its peripherals in the others, in ZMK's slot order, the order the
-central first heard them: a dongle's two halves; a central half's own and
-the other half's; the keyboard's own when it is not a split), the highest
-active layer's index and the first four bytes of its name, a count of key
-presses (every key, either half's on a split, modulo 256) and the modifiers
-held, once
-a hold is confirmed (pressed for 0.2 s, or a non-modifier key pressed under
-it; a layer key or another modifier confirms nothing), each kept on air
-until 0.25 s after its confirmation even when released sooner. Nothing
-pauses it for idle; ZMK's deep sleep (`CONFIG_ZMK_SLEEP`, off by default)
-powers the central off and stops it with the rest, and the wake is a boot,
-which starts the count over.
+What the keyboard's central sends and the Prospector Dongle reads: 9 bytes
+of manufacturer data, the advertisement's only content, in a legacy,
+non-connectable, non-scannable advertisement on a second advertising set
+next to ZMK's own, every 200 ms for as long as the central runs. A key
+press, a confirmed modifier and its release refresh the payload, which goes
+on air at the next advertising event (at most about 210 ms later) and adds
+no advertisement. The layout is this module's own
+([src/status_payload.h](src/status_payload.h)):
+
+| Byte | What |
+| --- | --- |
+| 0-1 | The company id `FF FF`, no company's. |
+| 2-3 | The magic `56 42` (`VB`). |
+| 4 | The layout's version, 2. |
+| 5 | The left half's battery in percent, 0 for no reading. |
+| 6 | The right half's battery, the same way. |
+| 7 | A count of key presses, every key, either half's on a split, modulo 256. |
+| 8 | The modifiers held, as the HID modifier byte (bit 0 left Ctrl to bit 7 right GUI). |
+
+The central's own level goes into the battery byte
+`CONFIG_BEACON_OWN_BATTERY` names, the left by default and neither on a
+split central with two peripherals or more, a dongle; its peripherals fill
+the others, in ZMK's slot order, the order the central first heard them: a
+dongle's two halves; a central half's own and the other half's; the
+keyboard's own when it is not a split. A modifier counts once a hold is
+confirmed (pressed for 0.2 s, or a non-modifier key pressed under it; a
+layer key or another modifier confirms nothing), and is kept on air until
+0.25 s after its confirmation even when released sooner. Nothing pauses the
+advertisement for idle; ZMK's deep sleep (`CONFIG_ZMK_SLEEP`, off by
+default) powers the central off and stops it with the rest, and the wake is
+a boot, which starts the count over.
+
+Any change to the layout is a new version, and the Prospector Dongle takes
+only its own: both ends are built from one commit, and across a change the
+screen shows no data rather than wrong numbers. The payload carries neither
+the active layer nor a charging state: no screen here shows a layer, and ZMK
+knows no charging state (a peripheral's battery event carries its level
+alone, and a device knows only whether USB powers it).
 
 It goes out in plaintext, with no pairing: anyone with a Bluetooth scanner in
-range reads the batteries, the layer and its name, how many keys were pressed
-in each 200 ms and which modifiers are held, never which keys; and the
-keyboard's address stays the same for a whole boot, so a session can be
-followed. The Prospector Dongle takes the payload of any keyboard in range,
-with no filter: two broadcasting keyboards in one room mix on its screen, the
-battery following whichever it heard last and the presses miscounted, and a
-keyboard running t-ogura's prospector-zmk-module v2.2.x, which sends the same
-prefix and version, shows too, its fields read as this layout's (read from
-the code, not tried).
+range reads the batteries, how many keys were pressed in each 200 ms and
+which modifiers are held, never which keys; and the keyboard's address stays
+the same for a whole boot, so a session can be followed. The Prospector
+Dongle takes the payload of any keyboard in range, with no filter: two
+broadcasting keyboards in one room mix on its screen, the battery following
+whichever it heard last and the presses miscounted. A keyboard running
+t-ogura's prospector-zmk-module does not show, nor does this module's
+keyboard show on that module's scanner: the two share the company id and
+differ in the magic and the length (read from the code, not tried).
 
 The cost on the central: `CONFIG_BT_EXT_ADV`, about 34 KB of flash and 11 KB
 of RAM on an nRF52840, and the host on the extended HCI commands; no
@@ -892,7 +906,7 @@ taller) or the linker (``region `FLASH' overflowed``; Limits, above).
 | `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans passively without a duplicate filter, and reads each half's battery, the key press count and the modifiers held from the status payload. The scan pauses while the sprite receiver has a central connected. |
 | `src/ble_receiver.c` | `CONFIG_BEACON_SPRITE_RECEIVE`: advertises connectably, takes a sprite pack over one GATT service into the sprite room (the shield overlay's `sprite_partition`, 384 KiB), shows it, and gives it back at boot. The protocol is its header. |
 | `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on the keyboard's central, a split's or the keyboard itself when it is not a split, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms; a key press, a modifier confirmed as held (held 0.2 s, the broadcaster's fixed confirm time, or a non-modifier key pressed under it) and its release refresh the payload for the next advertising event. |
-| `src/status_payload.h` | The payload both sides share: 26 bytes at prospector-zmk-module v2.2.3's offsets, of which the battery bytes, the active layer's index and name, the key press counter and the modifier byte are used. |
+| `src/status_payload.h` | The payload both sides share: 9 bytes, the prefix, the version, the two battery bytes, the key press counter and the modifier byte. |
 | `src/prospector_screen.c` | `CONFIG_BEACON_SCREEN`: ZMK custom status screen (LVGL 9), the HP bar along the bottom and the sprite above it, fed the observer's state every 500 ms; checks at compile time that an embedded GIF fits. |
 | `src/hp_bar.c`, `src/hp_bar.h` | The HP bar: `HP`, the bar with its value and, with the name row, the playing sprite's name on the row above; and the mapping of the payload's two batteries to its one level. |
 | `src/sprite.c`, `src/sprite_pack.c` | `CONFIG_BEACON_SPRITE`: the sprite pack player, with a tempo, eight frames per key press, one invalidation per changed picture, an endless loop, the back view while a modifier is held, and its own nearest-neighbour draw into the display buffer; it plays the room's pack, the embedded one or a received one, and names the HP bar. The pack's reader and inflater are plain C that also compiles on the host. |

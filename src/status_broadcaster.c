@@ -10,7 +10,10 @@
  * a second advertising set next to ZMK's own connectable one. Legacy PDU,
  * non-connectable, non-scannable (ADV_NONCONN_IND) with the payload in its
  * AD, so the Prospector Dongle's observer receives it with a passive scan;
- * refreshed every BEACON_PAYLOAD_INTERVAL_MS.
+ * refreshed every BEACON_PAYLOAD_INTERVAL_MS. The AD is the manufacturer data
+ * alone, with no Flags: a broadcaster is not discoverable, and the Flags type
+ * is required only of a connectable advertisement (Core Specification
+ * Supplement, Part A, 1.3).
  *
  * - CONFIG_BT_EXT_ADV: the host then shares one pool of
  *   CONFIG_BT_EXT_ADV_MAX_ADV_SET sets between ZMK's legacy bt_le_adv_start()
@@ -94,7 +97,6 @@
  */
 
 #include <stdint.h>
-#include <string.h>
 
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/gap.h>
@@ -109,7 +111,6 @@
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/events/keycode_state_changed.h>
 #include <zmk/events/position_state_changed.h>
-#include <zmk/keymap.h>
 #include <zmk/keys.h>
 
 #include "status_payload.h"
@@ -137,12 +138,8 @@ BUILD_ASSERT(CONFIG_BT_EXT_ADV_MAX_ADV_SET >= 2,
 #define MOD_LATCH_MS 250
 #define MOD_COUNT 8
 
-/* Flags 0x06 (general discoverable, no BR/EDR) as the module sent; with the
- * 26-byte manufacturer data the AD is exactly the 31-byte legacy maximum. */
-static const uint8_t ad_flags[] = {BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR};
 static uint8_t payload[BEACON_PAYLOAD_LEN] = {BEACON_PAYLOAD_PREFIX_INIT, BEACON_PAYLOAD_VERSION};
 static const struct bt_data ad[] = {
-    BT_DATA(BT_DATA_FLAGS, ad_flags, sizeof(ad_flags)),
     BT_DATA(BT_DATA_MANUFACTURER_DATA, payload, sizeof(payload)),
 };
 
@@ -219,16 +216,6 @@ static void fill_payload(void) {
     payload[BEACON_PAYLOAD_OFFSET_RIGHT] = (uint8_t)atomic_get(&battery[1]);
     payload[BEACON_PAYLOAD_OFFSET_KEYSTROKES] = (uint8_t)atomic_get(&keystrokes);
     payload[BEACON_PAYLOAD_OFFSET_MODIFIERS] = modifiers_on_air();
-
-    zmk_keymap_layer_index_t index = zmk_keymap_highest_layer_active();
-    const char *name = zmk_keymap_layer_name(zmk_keymap_layer_index_to_id(index));
-    char *out = (char *)&payload[BEACON_PAYLOAD_OFFSET_LAYER_NAME];
-
-    payload[BEACON_PAYLOAD_OFFSET_LAYER] = index;
-    memset(out, 0, BEACON_PAYLOAD_LAYER_NAME_LEN);
-    if (name != NULL) {
-        strncpy(out, name, BEACON_PAYLOAD_LAYER_NAME_LEN);
-    }
 }
 
 static int start_set(void) {
