@@ -217,8 +217,8 @@ config BEACON_STATUS_BROADCAST
       On the device that runs the keyboard's keymap (a keyboard that is not
       a split, or a split's central: a dongle, or the half that is the
       central), advertise the status payload (the batteries,
-      BEACON_OWN_BATTERY, the highest active layer and its name, a count of
-      key presses and the modifiers held; src/status_payload.h) as
+      BEACON_OWN_BATTERY, a count of key presses and the modifiers held;
+      src/status_payload.h) as
       manufacturer data in a legacy, non-connectable, non-scannable
       advertising set next to ZMK's own connectable one, refreshed every
       BEACON_PAYLOAD_INTERVAL_MS (src/status_payload.h) and right after a

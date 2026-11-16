@@ -4,16 +4,15 @@
  * SPDX-License-Identifier: MIT
  *
  * BLE observer for the keyboard's status advertisement (status_payload.h),
- * which status_broadcaster.c sends from canon's Imprint Dongle. This file owns
+ * which status_broadcaster.c sends from the keyboard. This file owns
  * the Bluetooth bring-up: CONFIG_ZMK_BLE=n compiles out ZMK's bt_enable()
  * callers (ble.c, and split/bluetooth/peripheral.c through ZMK_SPLIT_BLE) and
  * with them ZMK's connectable advertisement; the scan is passive and
  * transmits nothing. The sprite receiver (ble_receiver.c) advertises on its
  * own and pauses the scan while a central is connected.
  *
- * Only the prefix, the version byte, both halves' battery bytes, the
- * keystroke counter and the modifier byte are read. 0 = no reading. No
- * charging state is carried.
+ * Every byte of the payload is read: the prefix, the version, both halves'
+ * batteries (0 = no reading), the keystroke counter and the modifiers.
  *
  * - Passive scan: the broadcaster sends the payload in the AD of a
  *   non-connectable, non-scannable ADV_NONCONN_IND (status_broadcaster.c),
@@ -24,11 +23,11 @@
  * - The scan callback runs on the cooperative BT RX work queue (1200-byte
  *   stack without BT_SETTINGS): parse, copy under the spinlock, return. No
  *   logging and no LVGL there.
- * - Version filter: the version byte is the layout's major.minor. A layout
- *   change (t-xe2q) bumps it, and an old observer then shows "no data" rather
- *   than wrong numbers.
- * - Any keyboard that sends this payload is accepted (keyboard_id is not
- *   filtered): one keyboard in range is assumed.
+ * - Version filter: a payload counts only with this build's version byte at
+ *   this build's length, so across a layout change the screen shows "no data"
+ *   rather than wrong numbers.
+ * - Any keyboard that sends this payload is accepted (the payload names no
+ *   keyboard): one keyboard in range is assumed.
  */
 
 #include <string.h>
@@ -116,7 +115,7 @@ static void log_stats(struct k_work *work) {
 static bool find_payload(struct bt_data *data, void *user_data) {
     const uint8_t **payload = user_data;
 
-    if (data->type != BT_DATA_MANUFACTURER_DATA || data->data_len < BEACON_PAYLOAD_LEN ||
+    if (data->type != BT_DATA_MANUFACTURER_DATA || data->data_len != BEACON_PAYLOAD_LEN ||
         memcmp(data->data, payload_prefix, sizeof(payload_prefix)) != 0 ||
         data->data[BEACON_PAYLOAD_OFFSET_VERSION] != BEACON_PAYLOAD_VERSION) {
         return true;
